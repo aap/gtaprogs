@@ -5,7 +5,7 @@ OBJ = $(patsubst $(SRCDIR)/%.cpp,$(BUILDDIR)/%.o,$(SRC))
 DEP = $(patsubst $(SRCDIR)/%.cpp,$(BUILDDIR)/%.d,$(SRC))
 RWDIR=$(HOME)/src/rwtools
 LDLIBS=-static -ljson_mingw_libmt -lglfw3 -lglew32 -lopengl32 -lgdi32
-CFLAGS=-g -I$(RWDIR)/include -Wall -Wextra
+CFLAGS=-g -I$(RWDIR)/include -Wall -Wextra -DGLEW_STATIC
 OUT=$(shell basename `pwd`)
 
 $(OUT): $(OBJ) ../engine/gtaengine.a $(RWDIR)/lib/librwtools.a
