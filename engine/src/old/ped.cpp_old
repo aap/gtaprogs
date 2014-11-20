@@ -1,0 +1,310 @@
+#include "common.h"
+#include "atomic.h"
+#include "refframe.h"
+#include "animation.h"
+#include "ped.h"
+
+using namespace std;
+
+Ped::Ped(void)
+ : animGroup(0), m_clump(0), m_animRoot(0), m_anpk(0), m_state(-1), m_walkSpeed(0.0f), m_sprintFactor(0.0f), m_animState(PLAY), m_blocked(false)
+{
+	m_currentAnim = &m_frameAnim;
+	m_lastAnim = &m_frameAnim2;
+	m_currentAnim->setLoop(true);
+	m_lastAnim->setLoop(true);
+	m_blendTime = m_blendDuration = 0.0f;
+}
+
+Ped::~Ped(void)
+{
+	DECREF(m_clump);
+}
+
+static NodeHierarchy*
+findHier(RefFrame *f)
+{
+	NodeHierarchy *hier;
+	if((hier = f->getHierarchy()))
+		return hier;
+	FORALLCHILDREN(it, f){
+		if((hier = findHier(*it)))
+			return hier;
+	}
+	return 0;
+}
+
+void
+Ped::setClump(Clump *clump)
+{
+	DECREF(m_clump);
+	m_animRoot = 0;
+	m_clump = clump;
+	if(m_clump == 0)
+		return;
+	INCREF(m_clump);
+	NodeHierarchy *hier = findHier(m_clump->getFrame());
+	if(hier)
+		m_animRoot = hier->frame;
+	else
+		FORALLCHILDREN(it, m_clump->getFrame()){
+			m_animRoot = *it;
+			break;
+		}
+
+	m_clump->getFrame()->getMatrix() = Mat4(1.0f);
+	m_clump->getFrame()->getMatrix() *=Mat4::translation(Vec3(-2.0f, 0.0f, 0.0f));
+
+	Atomic *atm;
+/*
+	atm = new Atomic;
+	atm->setFrame(m_clump->getFrame());
+	atm->setMesh(axes);
+	m_clump->addAtomic(atm);
+
+	atm = new Atomic;
+	atm->setFrame(m_animRoot);
+	atm->setMesh(axes);
+	m_clump->addAtomic(atm);
+*/
+
+	/* Move skinned geometry above bone hierarchy to avoid
+	 * transformation by bone AND frame. */
+	hier = 0;
+	FORALLATOMICS(it, clump){
+		if((hier = (atm = *it)->getHierarchy()))
+			break;
+	}
+	if(hier){
+		RefFrame *f = hier->frame->getParent();
+		if(f)
+			atm->setFrame(f);
+		else
+			cout << "whaaa: no frame above node hierarchy\n";
+	}
+//	m_clump->getFrame()->print(cout);
+}
+
+Clump*
+Ped::getClump(void)
+{
+	return m_clump;
+}
+
+void
+Ped::updateAnimation(void)
+{
+	IfpFrame f1, f2;
+	m_currentAnim->reset();
+	m_currentAnim->getFrame(&f1, m_animRoot->name, m_animRoot->id);
+	m_currentAnim->skipToEnd();
+	m_currentAnim->getFrame(&f2, m_animRoot->name, m_animRoot->id);
+	m_rootPosDelta = f2.pos - f1.pos;
+	m_currentAnim->reset();
+}
+
+void
+Ped::applyTransition(RefFrame *hier, float a)
+{
+	IfpFrame f1, f2, f3;
+	m_lastAnim->getFrame(&f1, hier->name, hier->id);
+	m_currentAnim->getFrame(&f2, hier->name, hier->id);
+
+	Animation *an = (*m_anpk)["walk_player"];
+	an->interpInfo->blend(&f3, &f1, &f2, 1.0f-a);
+	if(hier == m_animRoot)
+		f3.pos.y = 0.0f;
+	an->interpInfo->apply(hier, &f3);
+	FORALLCHILDREN(it, hier)
+		applyTransition(*it, a);
+}
+
+void
+Ped::addTime(float t)
+{
+/*
+	if(m_state == SPRINT){
+		if(m_sprintFactor != 1.0f){
+			m_blendTime -= t;
+			if(m_blendTime < 0.0f)
+				m_blendTime = 0.0f;
+			m_sprintFactor = 1.0f - m_blendTime/m_blendDuration;
+			updateLocomotion();
+		}
+	}else{
+		if(m_sprintFactor != 0.0f){
+			m_blendTime -= t;
+			if(m_blendTime < .0f)
+				m_blendTime = 0.0f;
+			m_sprintFactor = m_blendTime/m_blendDuration;
+			updateLocomotion();
+		}
+	}
+*/
+	if(m_animState == PLAY){
+		IfpFrame f;
+		m_currentAnim->getFrame(&f, m_animRoot->name, m_animRoot->id);
+		Vec3 lastPos = f.pos;
+		float lastTime = m_currentAnim->getTime();
+		m_currentAnim->addTime(t);
+		if(m_currentAnim->getTime() < lastTime)
+			lastPos -= m_rootPosDelta;
+		m_currentAnim->apply(m_animRoot);
+		m_currentAnim->getFrame(&f, m_animRoot->name, m_animRoot->id);
+		Vec3 pos = f.pos;
+		Mat4 &m = m_animRoot->getMatrix();
+		m = Mat4::translation(Vec3(0.0f, -pos.y, 0.0f)) * m;
+		m_clump->getFrame()->getMatrix() *= Mat4::translation(Vec3(0.0f, (pos-lastPos).y, 0.0f));
+		if(m_currentAnim->isDone())
+			nextState();
+	}else if(m_animState == BLEND){
+		float a = m_blendTime / m_blendDuration;
+		applyTransition(m_animRoot, a);
+		m_blendTime -= t;
+		if(m_blendTime <= 0.0f){
+			m_animState = PLAY;
+			updateAnimation();
+		}
+	}
+}
+
+void
+Ped::render(void)
+{
+	m_clump->render();
+}
+
+void
+Ped::setAnimPackage(AnimPackage *anpk)
+{
+	m_anpk = anpk;
+}
+
+void
+Ped::updateLocomotion(void)
+{
+	float time = m_currentAnim->getTime();
+	float duration = m_currentAnim->getDuration();
+	m_currentAnim->setWeight(0, (1.0f-m_walkSpeed)*(1.0f-m_sprintFactor));
+	m_currentAnim->setWeight(1, m_walkSpeed*(1.0f-m_sprintFactor));
+	m_currentAnim->setWeight(2, m_sprintFactor);
+	updateAnimation();
+	m_currentAnim->addTime(time*m_currentAnim->getDuration()/duration);
+}
+
+void
+Ped::setWalkRunSpeed(float w)
+{
+	if(m_state != MOTION)
+		return;
+	if(m_walkSpeed == w)
+		return;
+	m_walkSpeed = w;
+	updateLocomotion();
+}
+
+void
+Ped::nextState(void)
+{
+	switch(m_state){
+	case START:
+		m_blocked = false;
+		setState(MOTION);
+		break;
+	case STOP:
+		m_blocked = false;
+		setState(IDLE);
+		break;
+	default:
+		cout << "default idle\n";
+		setState(IDLE);
+		break;
+	}
+}
+
+void
+Ped::setState(int state)
+{
+	if(m_blendTime > 0.0f)
+		return;
+	if(m_state == state || m_blocked)
+		return;
+	m_lastState = m_state;
+	m_state = state;
+
+	RefFrameAnim *tmp = m_lastAnim;
+	m_lastAnim = m_currentAnim;
+	m_currentAnim = tmp;
+	m_currentAnim->clearAnimations();
+
+	switch(state){
+	case MOTION:
+		if(m_lastState == IDLE){
+			m_state = START;
+			goto casestart;
+		}
+		m_currentAnim->addAnimation((*m_anpk)["walk_player"]);
+		m_currentAnim->addAnimation((*m_anpk)["run_player"]);
+		m_currentAnim->addAnimation((*m_anpk)["sprint_civi"]);
+		m_currentAnim->setWeight(0, (1.0f-m_walkSpeed)*(1.0f-m_sprintFactor));
+		m_currentAnim->setWeight(1, m_walkSpeed*(1.0f-m_sprintFactor));
+		m_currentAnim->setWeight(2, m_sprintFactor);
+		m_currentAnim->setLoop(true);
+		break;
+	case SPRINT:
+		m_currentAnim->addAnimation((*m_anpk)["sprint_civi"]);
+		m_currentAnim->setLoop(true);
+		break;
+	case START:
+	casestart:
+		m_blocked = true;
+		m_currentAnim->addAnimation((*m_anpk)["walk_start"]);
+		m_currentAnim->setLoop(false);
+		break;
+	case STOP:
+	casestop:
+		m_blocked = true;
+		m_currentAnim->addAnimation((*m_anpk)["run_stop"]);
+		m_currentAnim->setLoop(false);
+		break;
+	case IDLE:
+	default:
+		if(m_lastState == SPRINT){
+			m_state = STOP;
+			goto casestop;
+		}
+		m_currentAnim->addAnimation((*m_anpk)["idle_stance"]);
+		m_currentAnim->setLoop(true);
+		if(m_lastState >= 0){
+			m_animState = BLEND;
+			m_blendTime = m_blendDuration = 0.2f;
+			return;
+		}
+		break;
+	}
+	updateAnimation();
+	m_currentAnim->apply(m_animRoot);
+}
+
+void
+Ped::setForward(Vec3 dir)
+{
+	Vec3 up(0.0f, 0.0f, 1.0f);
+	Vec3 right = dir.cross(up);
+	Mat4 &m = m_clump->getFrame()->getMatrix();
+	m.e[0][0] = right.x;
+	m.e[0][1] = right.y;
+	m.e[0][2] = right.z;
+	m.e[1][0] = dir.x;
+	m.e[1][1] = dir.y;
+	m.e[1][2] = dir.z;
+	m.e[2][0] = up.x;
+	m.e[2][1] = up.y;
+	m.e[2][2] = up.z;
+}
+
+void
+Ped::rotate(float a)
+{
+	m_clump->getFrame()->getMatrix() *= Mat4::rotation(a, Vec3(0.0f, 0.0f, 1.0f));
+}

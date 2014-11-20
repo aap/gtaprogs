@@ -1,0 +1,406 @@
+#include <limits>
+#include "common.h"
+#include "refframe.h"
+#include "animation.h"
+
+using namespace std;
+
+static map<uint, AnimInterpolatorInfo*> interpolatorInfos;
+
+void
+registerInterpolatorScheme(AnimInterpolatorInfo *interpinfo)
+{
+	interpolatorInfos[interpinfo->type] = interpinfo;
+}
+
+Animation::Animation(uint type, int anumFrames, float aduration)
+ : numFrames(anumFrames), duration(aduration)
+{
+	keyframes = customData = 0;
+	if(interpolatorInfos.count(type) == 0){
+		cerr << "Can't create animation of type " << type << endl;
+		return;
+	}
+	interpInfo = interpolatorInfos[type];
+	interpInfo->alloc(&keyframes, &customData, numFrames);
+}
+
+Animation::~Animation(void)
+{
+	interpInfo->free(keyframes, customData, numFrames);
+}
+
+/*
+ * AnimInterpolator
+ */
+
+#define NEXTFRAME()	(m_nextFrame = (char*)m_nextFrame + frameSize)
+#define INTERP(a,i)	((AnimFrameHeader*)((char*)(a)->interpFrames + i*(a)->frameSize))
+
+AnimInterpolator::AnimInterpolator(void)
+ : m_nextFrame(0), frameSize(0), loop(true), anim(0), time(0.0f), interpFrames(0), numNodes(-1)
+{
+}
+
+void
+AnimInterpolator::setAnimation(Animation *an)
+{
+	if(anim)
+		anim->interpInfo->freeInterp(interpFrames, numNodes);
+	anim = an;
+	numNodes = anim->numNodes;
+	interpFrames = anim->interpInfo->allocInterp(numNodes);
+	m_nextFrame = anim->keyframes;
+	frameSize = anim->interpInfo->frameSize;
+}
+
+void
+AnimInterpolator::reset(void)
+{
+	time = 0.0f;
+	m_nextFrame = anim->keyframes;
+	for(int i = 0; i < numNodes; i++){
+		INTERP(this,i)->interp.key1 = (AnimFrameHeader*)m_nextFrame;
+		NEXTFRAME();
+	}
+	for(int i = 0; i < numNodes; i++){
+		INTERP(this,i)->interp.key2 = (AnimFrameHeader*)m_nextFrame;
+		NEXTFRAME();
+		anim->interpInfo->interpolate(INTERP(this,i), INTERP(this,i)->interp.key1,
+		                              INTERP(this,i)->interp.key2, 0.0f);
+	}
+}
+
+void
+AnimInterpolator::addTime(float atime)
+{
+	if(anim->duration == 0.0f)
+		return;
+	time += atime;
+	if(time > anim->duration){
+		if(loop){
+			while(time > anim->duration)
+				time -= anim->duration;
+			reset();
+		}else
+			time = anim->duration;
+	}
+	while(1){
+		int n = -1;
+		float minTime = numeric_limits<float>::max();
+		for(int i = 0; i < numNodes; i++){
+			AnimFrameHeader *f = INTERP(this,i);
+			if(time > f->interp.key2->key.time && 
+			   f->interp.key2->key.time < minTime){
+				minTime = f->interp.key2->key.time;
+				n = i;
+			}
+		}
+		if(n < 0)
+			break;
+		AnimFrameHeader *f = INTERP(this,n);
+		f->interp.key1 = f->interp.key2;
+		f->interp.key2 = (AnimFrameHeader*)m_nextFrame;
+		NEXTFRAME();
+	}
+	for(int i = 0; i < numNodes; i++){
+		AnimFrameHeader *f = INTERP(this,i);
+		float a = (f->interp.key1->key.time - f->interp.key2->key.time);
+		if(a != 0.0f)
+			a = (f->interp.key1->key.time - time) / a;
+		anim->interpInfo->interpolate(f, f->interp.key1, f->interp.key2, a);
+	}
+}
+
+/*
+ * IfpInterpInfo
+ */
+
+void
+IfpInterpInfo::doRegister(void)
+{
+	type = 1234;
+	frameSize = sizeof(Frame);
+	customDataSize = sizeof(map<string, int>);
+
+	registerInterpolatorScheme(this);	
+}
+
+void
+IfpInterpInfo::apply(void *result, AnimFrameHeader *af)
+{
+	RefFrame *rf = (RefFrame*)result;
+	Frame *f = (IfpFrame*)af;
+	if(f->type < 0)
+		return;
+	Mat4 &mat = rf->getMatrix();
+	Vec3 pos(mat.e[3][0], mat.e[3][1], mat.e[3][2]);
+	mat = Mat4::rotation(f->rot);
+	if(f->type > 0)
+		pos = f->pos;
+	mat.e[3][0] = pos.x;
+	mat.e[3][1] = pos.y;
+	mat.e[3][2] = pos.z;
+}
+
+void
+IfpInterpInfo::blend(AnimFrameHeader *out, AnimFrameHeader *in1,
+	             AnimFrameHeader *in2, float a)
+{
+	/* TODO */
+	interpolate(out, in1, in2, a);
+}
+
+void
+IfpInterpInfo::interpolate(AnimFrameHeader *out, AnimFrameHeader *in1,
+	                   AnimFrameHeader *in2, float a)
+{
+	Frame *outf = (Frame*)out;
+	Frame *inf1 = (Frame*)in1;
+	Frame *inf2 = (Frame*)in2;
+	outf->rot = inf1->rot.slerp(inf2->rot, a);
+	outf->pos = inf1->pos*(1.0f - a) + inf2->pos*a;
+	outf->scale = inf1->scale*(1.0f - a) = inf2->scale*a;
+	outf->type = inf1->type;
+}
+
+void
+IfpInterpInfo::alloc(void **kf, void **cd, int n)
+{
+	*kf = new Frame[n];
+	*cd = new Custom;
+}
+
+void
+IfpInterpInfo::free(void *kf, void *cd, int)
+{
+	Frame *kp = (Frame*)kf;
+	delete[] kp;
+	Custom *cp = (Custom*)cd;
+	delete cp;
+}
+
+void*
+IfpInterpInfo::allocInterp(int n)
+{
+	return new Frame[n];
+}
+
+void
+IfpInterpInfo::freeInterp(void *f, int)
+{
+	Frame *p = (Frame*)f;
+	delete[] p;
+}
+
+
+
+void
+applyIfpAnim(RefFrame *f, AnimInterpolator *a)
+{
+	IfpFrame *kf = getIfpFrame(a, f->name, f->id);
+	if(kf)
+		a->anim->interpInfo->apply(f, kf);
+
+	FORALLCHILDREN(it, f)
+		applyIfpAnim(*it, a);
+}
+
+IfpFrame*
+getIfpFrame(AnimInterpolator *a, string name, int id)
+{
+	IfpInterpInfo::Custom &c = *(IfpInterpInfo::Custom*)a->anim->customData;
+
+	if(c.names.count(name) != 0)
+		return (IfpFrame*) INTERP(a, c.names[name]);
+	if(id != -1 && c.ids.count(id) != 0)
+		return (IfpFrame*) INTERP(a, c.ids[id]);
+	return 0;
+}
+
+/*
+ * RefFrameAnim
+ */
+
+RefFrameAnim::RefFrameAnim(void)
+ : m_nanims(0)
+{
+}
+
+void
+RefFrameAnim::addAnimation(Animation *anim)
+{
+	if(m_nanims > 0 && 
+	   anim->interpInfo->type != m_interp[0].anim->interpInfo->type){
+		cout << "can't add animation of different types\n";
+		return;
+	}
+	m_weights.push_back(1.0f);
+	m_interp.resize(m_nanims+1);
+	m_interp[m_nanims].setAnimation(anim);
+	m_interp[m_nanims].reset();
+	m_interp[m_nanims].loop = m_loop;
+	m_nanims++;
+}
+
+void
+RefFrameAnim::clearAnimations(void)
+{
+	m_interp.clear();
+	m_weights.clear();
+	m_nanims = 0;
+}
+
+void
+RefFrameAnim::setWeight(int i, float w)
+{
+	m_weights[i] = w;
+}
+
+void
+RefFrameAnim::reset(void)
+{
+	for(int i = 0; i < m_nanims; i++)
+		m_interp[i].reset();
+}
+
+void
+RefFrameAnim::addTime(float t)
+{
+	float duration = getDuration();
+	float time = getTime();
+	if(time+t >= duration && !m_loop)
+		t = time+t - duration;
+	for(int i = 0; i < m_nanims; i++)
+		m_interp[i].addTime(t*m_interp[i].anim->duration/duration);
+}
+
+void
+RefFrameAnim::skipToEnd(void)
+{
+	for(int i = 0; i < m_nanims; i++){
+		m_interp[i].reset();
+		m_interp[i].addTime(m_interp[i].anim->duration);
+	}
+}
+
+float
+RefFrameAnim::getTime(void)
+{
+	float time = 0.0f;
+	for(int i = 0; i < m_nanims; i++)
+		time += m_interp[i].time * m_weights[i];
+	return time;
+}
+
+float
+RefFrameAnim::getDuration(void)
+{
+	float duration = 0.0f;
+	for(int i = 0; i < m_nanims; i++)
+		duration += m_interp[i].anim->duration * m_weights[i];
+	return duration;
+}
+
+void
+RefFrameAnim::setLoop(bool loop)
+{
+	m_loop = loop;
+	for(int i = 0; i < m_nanims; i++)
+		m_interp[i].loop = loop;
+}
+
+bool
+RefFrameAnim::getLoop(void)
+{
+	return m_loop;
+}
+
+bool
+RefFrameAnim::isDone(void)
+{
+	return !m_loop && getTime() >= getDuration();
+}
+
+void
+RefFrameAnim::getFrame(IfpFrame *f, std::string name, int id)
+{
+	IfpFrame *f1, *f2;
+	f->type = -1;
+	switch(m_nanims){
+	case 2:
+		f1 = getIfpFrame(&m_interp[0], name, id);
+		f2 = getIfpFrame(&m_interp[1], name, id);
+		if(f1 == 0){
+			f1 = f2;
+			goto single;
+		}
+		if(f2 == 0)
+			goto single;
+		/* only correct if weights add up to 1 */
+		m_interp[0].anim->interpInfo->blend(f, f1, f2, m_weights[1]);
+		break;
+
+	case 1:
+		f1 = getIfpFrame(&m_interp[0], name, id);
+	single:
+		if(f1 == 0)
+			break;
+		f->pos = f1->pos;
+		f->rot = f1->rot;
+		f->scale = f1->scale;
+		f->type = f1->type;
+		break;
+
+	case 0:
+		break;
+
+	default:
+		IfpFrame tmp;
+		int i = 0;
+		while(i < m_nanims){
+			f1 = getIfpFrame(&m_interp[i++], name, id);
+			if(f1)
+				break;
+		}
+		if(i == m_nanims)
+			goto single;
+		if(i > m_nanims)
+			break;
+		float acc = m_weights[i-1];
+		while(i < m_nanims){
+			f2 = getIfpFrame(&m_interp[i++], name, id);
+			if(f2)
+				break;
+		}
+		if(i > m_nanims)
+			break;
+		acc = m_weights[i-1]+acc;
+		float w = acc == 0.0f ? 0.0f : m_weights[i-1]/acc;
+		m_interp[0].anim->interpInfo->blend(&tmp, f1, f2, w);
+
+		bool fail = true;
+		while(i < m_nanims){
+			f1 = getIfpFrame(&m_interp[i++], name, id);
+			if(f1 == 0)
+				continue;
+			fail = false;
+			acc = m_weights[i-1]+acc;
+			w = acc == 0.0f ? 0.0f : m_weights[i-1]/acc;
+			m_interp[0].anim->interpInfo->blend(f, &tmp, f1, w);
+		}
+		if(fail)
+			cout << "couldn't blend" SP name SP id << endl;
+		break;
+	}
+}
+
+void
+RefFrameAnim::apply(RefFrame *hier)
+{
+	IfpFrame f;
+	getFrame(&f, hier->name, hier->id);
+	m_interp[0].anim->interpInfo->apply(hier, &f);
+	FORALLCHILDREN(it, hier)
+		apply(*it);
+}

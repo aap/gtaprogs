@@ -1,0 +1,26 @@
+{ "states": [
+    { "name": "Idle",
+      "anim": {
+        "type": "clip",
+        "name": "idle_stance",
+        "loop": true
+      }
+    },
+
+    { "name": "Motion",
+      "anim": {
+        "type": "blend",
+        "a0": {
+          "type": "clip",
+          "name": "walk_player"
+        },
+        "a1": {
+          "type": "clip",
+          "name": "run_player"
+        },
+        "weight": 0.0
+        "loop": true
+      }
+    }
+  ]
+}

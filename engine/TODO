@@ -1,0 +1,9 @@
+Rendering:
+  - investigate and correct reflection maps and alphas
+  - frustum cull
+  - render debug objects
+  - render text
+  - make debug gui
+
+Animations:
+  - transitions

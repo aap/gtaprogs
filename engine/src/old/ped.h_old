@@ -1,0 +1,52 @@
+class Ped {
+public:
+	enum {
+		IDLE = 0,
+		MOTION,
+		SPRINT,
+		START,
+		STOP
+	};
+	enum {
+		PLAY = 0,
+		BLEND
+	};
+	int animGroup;
+
+	Ped(void);
+	~Ped(void);
+	void setClump(Clump *clump);
+	Clump *getClump(void);
+	void updateAnimation(void);
+	void addTime(float t);
+	void render(void);
+	void setAnimPackage(AnimPackage *anpk);
+	void setWalkRunSpeed(float w);
+	void nextState(void);
+	void setState(int state);
+	void setForward(Vec3 dir);
+	void rotate(float a);
+
+	void updateLocomotion(void);
+	void applyTransition(RefFrame *hier, float a);
+private:
+	Clump *m_clump;
+	RefFrame *m_animRoot;
+	AnimPackage *m_anpk;
+
+	int m_state, m_lastState;
+	float m_blendTime, m_blendDuration;
+
+	Vec3 m_rootPosDelta;
+//	bool m_isSprinting;
+	float m_walkSpeed;
+	float m_sprintFactor;
+	int m_animState;
+	bool m_blocked;
+	RefFrameAnim *m_currentAnim, *m_lastAnim;
+	RefFrameAnim m_frameAnim;
+	RefFrameAnim m_frameAnim2;
+
+	Ped(const Ped&);
+	Ped &operator=(const Ped&);
+};
