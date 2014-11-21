@@ -16,24 +16,24 @@ uniform vec4 u_matcolor;
 uniform vec4 u_ambcolor;
 uniform vec3 u_lightdir;
 uniform mat3 u_normalmat;
-uniform mat4 pmat;
-uniform mat4 mvmat;
-uniform mat4 bonemats[64];
+uniform mat4 u_pmat;
+uniform mat4 u_mvmat;
+uniform mat4 u_bonemats[64];
 
 void
 main(void)
 {
-	mat4 modelview = mvmat;
+	mat4 modelview = u_mvmat;
 	if(in_weights[0] != 0.0){
-		mat4 m = bonemats[int(in_indices[0])] * in_weights[0];
+		mat4 m = u_bonemats[int(in_indices[0])] * in_weights[0];
 		for(int i = 1; i < 4 && in_weights[i] != 0.0; i++){
-			m += bonemats[int(in_indices[i])] * in_weights[i];
+			m += u_bonemats[int(in_indices[i])] * in_weights[i];
 		}
-		modelview = mvmat * m;
+		modelview = u_mvmat * m;
 	}
 
-	gl_Position = pmat * modelview * vec4(in_vertex, 1.0);
-//	vec3 u = normalize(vec3(mvmat * vec4(in_vertex, 1.0)));
+	gl_Position = u_pmat * modelview * vec4(in_vertex, 1.0);
+//	vec3 u = normalize(vec3(u_mvmat * vec4(in_vertex, 1.0)));
 ////	vec3 n = normalize(u_normalmat * in_normal);
 //	vec3 n = normalize(mat3(modelview) * in_normal);
 //	vec3 r = reflect(u, n);

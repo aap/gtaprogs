@@ -92,6 +92,33 @@ readKeyboard(GLFWwindow *w)
         }else{
                 kbDir = Vec3(0.0f, 0.0f, 0.0f);
         }
+
+	extern Vec4 envvector;
+
+	if(glfwGetKey(w, 'H')){
+		if(isShiftDown)
+			envvector.x += 0.01;
+		else
+			envvector.x -= 0.01;
+	}
+	if(glfwGetKey(w, 'J')){
+		if(isShiftDown)
+			envvector.y += 0.01;
+		else
+			envvector.y -= 0.01;
+	}
+	if(glfwGetKey(w, 'K')){
+		if(isShiftDown)
+			envvector.z += 0.01;
+		else
+			envvector.z -= 0.01;
+	}
+	if(glfwGetKey(w, 'L')){
+		if(isShiftDown)
+			envvector.w += 0.01;
+		else
+			envvector.w -= 0.01;
+	}
 }
 
 void

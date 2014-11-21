@@ -29,6 +29,10 @@ static Clump *wheels;
 static Car *car;
 static MapObj *mapobj;
 
+
+Vec4 envvector;
+
+
 int
 initIII(void)
 {
@@ -375,6 +379,8 @@ init(void)
 //	cam->setPosition(Vec3(8.90396, 3.51584, 4.61643));
 //	cam->setTarget(Vec3(-0.0313907, 0.0816754, 0.533333));
 
+	envvector = Vec4(0.85496187, 0.0011143609, 1.0, 1.0);
+
 	initState(state);
 	defaultShader->use();
 	state->updateLocs(*defaultShader);
@@ -402,6 +408,7 @@ render(void)
 
 //	state->vec4(AMBCOL, true)->val = Vec4(0.5f, 0.5f, 0.5f, 1.0f);
 	state->vec4(AMBCOL, true)->val = Vec4(30, 30, 30, 255)/255.0f;
+	state->vec4(ENVXFORM, true)->val = envvector;
 //	Vec3 lightdir = Vec3(-1.0f, -1.0f, -1.0f).normalized();
 	Vec3 lightdir = Vec3(0.5, -0.5, -sqrt(0.5));
 	state->vec3(LIGHTDIR, true)->val = Vec3(state->mat4(MVMAT)->val * Vec4(lightdir));

@@ -165,14 +165,15 @@ initState(State *state)
 	state->addVar(AMBCOL, new ShaderVec4("u_ambcolor"));
 	state->addVar(LIGHTDIR, new ShaderVec3("u_lightdir"));
 	state->addVar(NORMALMAT, new ShaderMat3("u_normalmat"));
-	state->addVar(PMAT, new ShaderMat4("pmat"));
-	state->addVar(MVMAT, new ShaderMat4("mvmat"));
-	state->addVar(BONEMATS, new ShaderMatArray("bonemats"));
-	state->addVar(TEXTURE0, new ShaderInt("texture0"));
-	state->addVar(TEXTURE1, new ShaderInt("texture1"));
-	state->addVar(TEXTURE2, new ShaderInt("texture2"));
-	state->addVar(SPECMULT, new ShaderFloat("specMult"));
-	state->addVar(REFLMULT, new ShaderFloat("reflMult"));
+	state->addVar(PMAT, new ShaderMat4("u_pmat"));
+	state->addVar(MVMAT, new ShaderMat4("u_mvmat"));
+	state->addVar(BONEMATS, new ShaderMatArray("u_bonemats"));
+	state->addVar(TEXTURE0, new ShaderInt("u_texture0"));
+	state->addVar(TEXTURE1, new ShaderInt("u_texture1"));
+	state->addVar(TEXTURE2, new ShaderInt("u_texture2"));
+	state->addVar(SPECMULT, new ShaderFloat("u_specMult"));
+	state->addVar(REFLMULT, new ShaderFloat("u_reflMult"));
+	state->addVar(ENVXFORM, new ShaderVec4("u_envXform"));
 
 	state->vec4(MATCOL, true)->val = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
 	state->i(TEXTURE0, true)->val = 0;
