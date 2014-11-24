@@ -362,6 +362,9 @@ init(void)
 		if(!initSA())
 			return 0;
 	}
+	
+	Mat4 &m = car->getClump()->getFrame()->getMatrix();
+	m = Mat4::rotation(PI/2, Vec3(0,0,1)) * m;
 
 	cam = new Camera;
 	state = new State;
@@ -372,12 +375,8 @@ init(void)
 //	cam->setPosition(Vec3(0.0f, 10.0f, 0.0f));
 //	cam->setPosition(Vec3(0.0f, -6.0f, 2.0f));
 //	cam->setPosition(Vec3(8.12909, 3.38747, 4.35501));
-	// not bad
-//	cam->setPosition(Vec3(-3.14601, -1.18233, -7.57576));
-//	cam->setPosition(Vec3(-7.11732, 2.73175, 3.25176));
-	cam->setPosition(Vec3(7.11621, 2.73501, 3.25182));
-//	cam->setPosition(Vec3(8.90396, 3.51584, 4.61643));
-//	cam->setTarget(Vec3(-0.0313907, 0.0816754, 0.533333));
+	// tampa screen
+	cam->setPosition(Vec3(-2.73501, 7.11621, 3.25182));
 
 	envvector = Vec4(0.85496187, 0.0011143609, 1.0, 1.0);
 
@@ -407,10 +406,11 @@ render(void)
 	glEnable(GL_BLEND);
 
 //	state->vec4(AMBCOL, true)->val = Vec4(0.5f, 0.5f, 0.5f, 1.0f);
-	state->vec4(AMBCOL, true)->val = Vec4(30, 30, 30, 255)/255.0f;
+//	state->vec4(AMBCOL, true)->val = Vec4(30, 30, 30, 255)/255.0f;
+	state->vec4(AMBCOL, true)->val = Vec4(177, 177, 177, 255)/255.0f;
 	state->vec4(ENVXFORM, true)->val = envvector;
 //	Vec3 lightdir = Vec3(-1.0f, -1.0f, -1.0f).normalized();
-	Vec3 lightdir = Vec3(0.5, -0.5, -sqrt(0.5));
+	Vec3 lightdir = Vec3(0.5, 0.5, -sqrt(0.5));
 	state->vec3(LIGHTDIR, true)->val = Vec3(state->mat4(MVMAT)->val * Vec4(lightdir));
 
 	glVertexAttrib4f(IN_COLOR, 1.0f, 1.0f, 1.0f, 1.0f);

@@ -44,28 +44,23 @@ main(void)
 	vec3 st = U - n*dot(n, V);
 	v_texcoord2.st = st.xy;
 
-	// actually in_color
+	float diffcol = 0.5804683;			// @ 0x3d4.xyz
+	float magic2 = magic*1.0039216688675805;	// @ 0x3cd.w
+
+	// should actually be in_color
 	v_color = vec4(0, 0, 0, 1);
 	// lambert
 	float l = max(0.0, dot(mat3(u_mvmat)*in_normal, -u_lightdir));
-	v_color.rgb += l*vec3(0.5804683);
+	v_color.rgb += l*vec3(diffcol);
 	// ambient
-	v_color.rgb += vec3(0.40449339);
+	v_color.rgb += u_ambcolor.rgb*diffcol;
 	v_color = clamp(v_color, 0.0, 1.0);
 	v_color *= u_matcolor;
 
-////	vec3 N = u_normalmat * in_normal;
-//	vec3 N = mat3(u_mvmat) * in_normal;
-//	float L = max(0.0, dot(N, -u_lightdir));
-//	vec4 lightval = vec4(L, L, L, 1.0);
-//	v_color = u_matcolor*lightval + u_matcolor*u_ambcolor;
-////	v_color = u_matcolor*lightval;
-//	v_color.a = u_matcolor.a;
-
-	v_envcolor = vec4(192.0/128.0)*u_reflMult*0.5827;
+	v_envcolor = vec4(192.0/128.0)*u_reflMult*magic2;
 
 	if(st.z < 0){
-		v_speccolor = vec4(96.0/128.0)*u_specMult*0.5827;
+		v_speccolor = vec4(96.0/128.0)*u_specMult*magic2;
 		v_speccolor.a = v_color.a;
 	}else
 		v_speccolor = vec4(0.0, 0.0, 0.0, 1.0);
